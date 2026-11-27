@@ -2450,20 +2450,20 @@
     }
 
     document.addEventListener(`DOMContentLoaded`, initApp);
-        // ==================== CẤU HÌNH GITHUB ====================
+    // ==================== CẤU HÌNH GITHUB & TIẾN TRÌNH (Dùng userProgress) ====================
     const GITHUB_CONFIG = {
-      owner: "LiQingFeng710102", // ⚠️ Thay bằng username GitHub (vd: "nguyenvana")
-      repo: "S-h-c-ph-n-SPVL",  // ⚠️ Thay bằng tên Repo (vd: "so-do-hoc-phan-vat-ly")
-      path: "progress.json",          // Tên file lưu dữ liệu trên GitHub (giữ nguyên)
-      branch: "main"                 // Nhánh (thường là "main" hoặc "master")
+      owner: "TÊN_TAI_KHOAN_CỦA_BẠN", // ⚠️ Thay bằng username GitHub của bạn (ví dụ: "nguyenvana")
+      repo: "TÊN_KHO_CHỨA_CỦA_BẠN",  // ⚠️ Thay bằng tên Repository (ví dụ: "so-do-hoc-phan-vat-ly")
+      path: "progress.json",          // Tên file lưu dữ liệu trên GitHub
+      branch: "main"                 // Nhánh mặc định ("main" hoặc "master")
     };
 
-    // Hàm hỗ trợ mã hóa tiếng Việt cho GitHub API
+    // Mã hóa Tiếng Việt / Unicode sang mã Base64 cho GitHub API
     function utf8_to_b64(str) {
       return window.btoa(unescape(encodeURIComponent(str)));
     }
 
-    // Hàm thực hiện lưu tiến trình lên GitHub
+    // 1. HÀM LƯU TIẾN TRÌNH LÊN GITHUB
     async function saveProgressToGithub() {
       let token = localStorage.getItem("gh_pat_token");
       if (!token) {
@@ -2473,11 +2473,10 @@
         localStorage.setItem("gh_pat_token", token);
       }
 
-      // Lấy dữ liệu tiến trình hiện tại từ localStorage của trang web
-      const currentData = localStorage.getItem("course_progress") || localStorage.getItem("physics_progress") || JSON.stringify({
-        saved_at: new Date().toISOString(),
-        note: "Tiến trình học phần Sp Vật Lý"
-      });
+      // Trích xuất dữ liệu từ biến userProgress
+      const dataToSave = (typeof userProgress !== "undefined") 
+        ? JSON.stringify(userProgress) 
+        : (localStorage.getItem("userProgress") || "{}");
 
       const apiUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.path}`;
 
@@ -2496,8 +2495,8 @@
         }
 
         const payload = {
-          message: "Cập nhật tiến trình học phần (" + new Date().toLocaleString("vi-VN") + ")",
-          content: utf8_to_b64(currentData),
+          message: "Cập nhật tiến trình userProgress (" + new Date().toLocaleString("vi-VN") + ")",
+          content: utf8_to_b64(dataToSave),
           branch: GITHUB_CONFIG.branch
         };
         if (sha) payload.sha = sha;
@@ -2513,62 +2512,67 @@
         });
 
         if (putRes.ok) {
-          alert("✅ Đã lưu tiến trình học lên GitHub thành công!");
+          // Lưu tức thì vào bộ nhớ trình duyệt local để F5 thấy ngay
+          localStorage.setItem("userProgress", dataToSave);
+          alert("✅ Đã lưu tiến trình thành công lên GitHub!");
         } else {
           const errorData = await putRes.json();
           if (putRes.status === 401 || putRes.status === 403) {
             localStorage.removeItem("gh_pat_token");
-            alert("❌ Token không hợp lệ. Vui lòng bấm lại nút để nhập lại Token.");
+            alert("❌ Token không hợp lệ. Vui lòng bấm lại nút để nhập Token mới.");
           } else {
             alert("❌ Lỗi khi lưu: " + (errorData.message || "Không xác định"));
           }
         }
       } catch (err) {
-        alert("❌ Lỗi kết nối mạng: " + err.message);
+        alert("❌ Lỗi kết nối: " + err.message);
       }
     }
-        // ==================== TỰ ĐỘNG ĐỌC TIẾN TRÌNH KHI MỞ TRANG ====================
+
+    // 2. HÀM TỰ ĐỘNG TẢI & TÔ MÀU LẠI SƠ ĐỒ KHI MỞ TRANG HOẶC F5
     async function loadProgressOnPageLoad() {
-      const apiUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${GITHUB_CONFIG.branch}/${GITHUB_CONFIG.path}?t=${new Date().getTime()}`;
-      
+      const rawUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${GITHUB_CONFIG.branch}/${GITHUB_CONFIG.path}?t=${new Date().getTime()}`;
+
       try {
-        // 1. Đọc dữ liệu từ file progress.json trên GitHub
-        const res = await fetch(apiUrl);
+        const res = await fetch(rawUrl);
         if (res.ok) {
-          const dataText = await res.text();
-          // Lưu tạm vào localStorage của trình duyệt
-          localStorage.setItem("course_progress", dataText);
-          localStorage.setItem("physics_progress", dataText);
+          const remoteDataText = await res.text();
+          localStorage.setItem("userProgress", remoteDataText);
         }
-      } catch (err) {
-        console.log("Không thể tải progress.json từ GitHub, sẽ dùng dữ liệu lưu tạm ở máy.");
+      } catch (e) {
+        console.warn("Dùng tiến trình lưu tạm ở bộ nhớ máy local.");
       }
 
-      // 2. Lấy dữ liệu tiến trình từ localStorage để cập nhật lại giao diện
-      const savedData = localStorage.getItem("course_progress") || localStorage.getItem("physics_progress");
-      if (savedData) {
+      // Khôi phục dữ liệu vào biến userProgress và vẽ lại giao diện
+      const localData = localStorage.getItem("userProgress");
+      if (localData) {
         try {
-          const progress = JSON.parse(savedData);
+          const parsed = JSON.parse(localData);
           
-          // 🔴 KHÔI PHỤC TRẠNG THÁI GIAO DIỆN:
-          // Tùy theo cách trang web của bạn lưu biến trạng thái (ví dụ: completedCourses, userProgress, ...)
-          // Bạn cập nhật lại biến đó và gọi hàm vẽ/tô màu lại sơ đồ:
-          if (window.userProgress && typeof progress === 'object') {
-            Object.assign(window.userProgress, progress);
+          if (typeof userProgress !== "undefined") {
+            if (Array.isArray(userProgress)) {
+              userProgress.length = 0;
+              if (Array.isArray(parsed)) userProgress.push(...parsed);
+            } else if (typeof userProgress === "object" && userProgress !== null) {
+              Object.assign(userProgress, parsed);
+            }
+          } else {
+            window.userProgress = parsed;
           }
-          
-          // Nếu trang web có hàm cập nhật lại màu sắc (ví dụ: updateTree() hoặc renderUI()):
+
+          // Kích hoạt lại hàm cập nhật màu sắc sơ đồ cây
           if (typeof updateTree === "function") updateTree();
           if (typeof renderUI === "function") renderUI();
+          if (typeof render === "function") render();
           if (typeof updateGraph === "function") updateGraph();
 
-        } catch (e) {
-          console.error("Lỗi đọc tiến trình:", e);
+        } catch (err) {
+          console.error("Lỗi đọc userProgress:", err);
         }
       }
     }
 
-    // Tự động chạy ngay khi trang web tải xong
+    // Tự động chạy ngay khi mở trang web
     document.addEventListener("DOMContentLoaded", loadProgressOnPageLoad);
   </script>
 </body>
