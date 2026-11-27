@@ -2527,6 +2527,49 @@
         alert("❌ Lỗi kết nối mạng: " + err.message);
       }
     }
+        // ==================== TỰ ĐỘNG ĐỌC TIẾN TRÌNH KHI MỞ TRANG ====================
+    async function loadProgressOnPageLoad() {
+      const apiUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${GITHUB_CONFIG.branch}/${GITHUB_CONFIG.path}?t=${new Date().getTime()}`;
+      
+      try {
+        // 1. Đọc dữ liệu từ file progress.json trên GitHub
+        const res = await fetch(apiUrl);
+        if (res.ok) {
+          const dataText = await res.text();
+          // Lưu tạm vào localStorage của trình duyệt
+          localStorage.setItem("course_progress", dataText);
+          localStorage.setItem("physics_progress", dataText);
+        }
+      } catch (err) {
+        console.log("Không thể tải progress.json từ GitHub, sẽ dùng dữ liệu lưu tạm ở máy.");
+      }
+
+      // 2. Lấy dữ liệu tiến trình từ localStorage để cập nhật lại giao diện
+      const savedData = localStorage.getItem("course_progress") || localStorage.getItem("physics_progress");
+      if (savedData) {
+        try {
+          const progress = JSON.parse(savedData);
+          
+          // 🔴 KHÔI PHỤC TRẠNG THÁI GIAO DIỆN:
+          // Tùy theo cách trang web của bạn lưu biến trạng thái (ví dụ: completedCourses, userProgress, ...)
+          // Bạn cập nhật lại biến đó và gọi hàm vẽ/tô màu lại sơ đồ:
+          if (window.userProgress && typeof progress === 'object') {
+            Object.assign(window.userProgress, progress);
+          }
+          
+          // Nếu trang web có hàm cập nhật lại màu sắc (ví dụ: updateTree() hoặc renderUI()):
+          if (typeof updateTree === "function") updateTree();
+          if (typeof renderUI === "function") renderUI();
+          if (typeof updateGraph === "function") updateGraph();
+
+        } catch (e) {
+          console.error("Lỗi đọc tiến trình:", e);
+        }
+      }
+    }
+
+    // Tự động chạy ngay khi trang web tải xong
+    document.addEventListener("DOMContentLoaded", loadProgressOnPageLoad);
   </script>
 </body>
 </html>
